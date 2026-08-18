@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimalist Editorial Widget</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: linear-gradient(135deg, #5c82a6 0%, #8aadc4 100%);
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 20px;
+      padding: 28px 20px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      color: #ffffff;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+    }
+
+    .setup {
+      font-weight: 400;
+      font-size: 1.2rem;
+      line-height: 1.4;
+      letter-spacing: -0.01em;
+      margin-bottom: 20px;
+      color: #ffffff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .reveal-btn {
+      background: transparent;
+      color: rgba(255, 255, 255, 0.7);
+      border: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 2px 4px;
+      font-weight: 300;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .reveal-btn:hover {
+      color: #ffffff;
+      border-bottom-color: rgba(255, 255, 255, 0.8);
+    }
+
+    .punchline {
+      font-weight: 300;
+      font-size: 1.05rem;
+      line-height: 1.4;
+      color: #e0f2fe;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .punchline.show {
+      margin-top: 18px;
+      opacity: 1;
+      max-height: 80px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="glass-card">
+    <p class="setup">Loading today's joke...</p>
+    <button class="reveal-btn" style="display:none;" onclick="toggle()">Reveal</button>
+    <p class="punchline" id="punchline"></p>
+  </div>
+
+  <script>
+    function toggle() {
+      const p = document.getElementById('punchline');
+      const btn = document.querySelector('.reveal-btn');
+      p.classList.toggle('show');
+      btn.textContent = p.classList.contains('show') ? 'Hide' : 'Reveal';
+    }
+
+    async function loadJoke() {
+      const targetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRDa_RGkV_VoatK67gdhQSHJY2_3rpGDuhRU7BizrTDKsIawAtT21kkZThQVr90eYzER_hrBksj4z52/pub?gid=273800282&single=true&output=csv';
+      
+      try {
+        const response = await fetch(targetUrl);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const csvData = await response.text();
+        
+        if (csvData.trim().startsWith('<')) {
+          throw new Error("Access denied. Ensure the Google Sheet is fully published.");
+        }
+
+        const rows = parseCSV(csvData);
+        
+        if (rows.length < 2) {
+          throw new Error("Spreadsheet is empty or headers are missing.");
+        }
+
+        const headers = rows[0];
+        const dateIdx = headers.indexOf('Formatted Date');
+        const jokeIdx = headers.indexOf('Joke');
+        const punchlineIdx = headers.indexOf('Punchline');
+        
+        if (dateIdx === -1 || jokeIdx === -1 || punchlineIdx === -1) {
+          throw new Error("Could not find the correct column headers.");
+        }
+        
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const formattedDate = `${yyyy}-${mm}-${dd}`;
+        
+        const todayJoke = rows.find(row => row[dateIdx] === formattedDate);
+        
+        const setupEl = document.querySelector('.setup');
+        const punchlineEl = document.getElementById('punchline');
+        const revealBtn = document.querySelector('.reveal-btn');
+        
+        if (todayJoke) {
+          setupEl.textContent = todayJoke[jokeIdx];
+          punchlineEl.textContent = todayJoke[punchlineIdx];
+          revealBtn.style.display = 'inline-block';
+        } else {
+          setupEl.textContent = `No joke found for ${formattedDate}.`;
+          revealBtn.style.display = 'none';
+        }
+        
+      } catch (error) {
+        console.error("Error loading joke:", error);
+        document.querySelector('.setup').textContent = error.message || "Failed to load the joke.";
+      }
+    }
+
+    function parseCSV(str) {
+      const arr = [];
+      let quote = false;
+      for (let row = 0, col = 0, c = 0; c < str.length; c++) {
+        let cc = str[c], nc = str[c+1];
+        arr[row] = arr[row] || [];
+        arr[row][col] = arr[row][col] || '';
+        if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
+        if (cc == '"') { quote = !quote; continue; }
+        if (cc == ',' && !quote) { ++col; continue; }
+        if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
+        if (cc == '\n' && !quote) { ++row; col = 0; continue; }
+        if (cc == '\r' && !quote) { ++row; col = 0; continue; }
+        arr[row][col] += cc;
+      }
+      return arr;
+    }
+
+    loadJoke();
+  </script>
+
+</body>
+</html>
